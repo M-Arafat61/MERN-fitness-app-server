@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const app = express();
@@ -30,6 +30,10 @@ async function run() {
       .db("syncFitDb")
       .collection("subscribers");
     const imageCollection = client.db("syncFitDb").collection("exerciseImages");
+    const trainerCollection = client.db("syncFitDb").collection("trainers");
+    const trainerApplicationCollection = client
+      .db("syncFitDb")
+      .collection("trainerApplications");
 
     // jwt related apis
     //  creation of jwt token and sending as obj to frontend
@@ -88,6 +92,25 @@ async function run() {
     // images api
     app.get("/images", async (req, res) => {
       const result = await imageCollection.find().toArray();
+      res.send(result);
+    });
+
+    // trainers api
+    app.get("/trainers", async (req, res) => {
+      const result = await trainerCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.get("/trainer-details/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await trainerCollection.findOne(query);
+      res.send(result);
+    });
+
+    app.post("/trainer-applications", async (req, res) => {
+      const form = req.body;
+      const result = await trainerApplicationCollection.insertOne(form);
       res.send(result);
     });
 
