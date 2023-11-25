@@ -25,6 +25,11 @@ async function run() {
     await client.connect();
 
     const userCollection = client.db("syncFitDb").collection("users");
+    const reviewCollection = client.db("syncFitDb").collection("reviews");
+    const subscriberCollection = client
+      .db("syncFitDb")
+      .collection("subscribers");
+    const imageCollection = client.db("syncFitDb").collection("exerciseImages");
 
     // jwt related apis
     //  creation of jwt token and sending as obj to frontend
@@ -64,6 +69,25 @@ async function run() {
         return res.send({ status: "user already exists" });
       }
       const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
+
+    // testimonial/reviews api
+    app.get("/reviews", async (req, res) => {
+      const result = await reviewCollection.find().toArray();
+      res.send(result);
+    });
+
+    // subscriptions user api
+    app.post("/subscriptions", async (req, res) => {
+      const subscriber = req.body;
+      const result = await subscriberCollection.insertOne(subscriber);
+      res.send(result);
+    });
+
+    // images api
+    app.get("/images", async (req, res) => {
+      const result = await imageCollection.find().toArray();
       res.send(result);
     });
 
