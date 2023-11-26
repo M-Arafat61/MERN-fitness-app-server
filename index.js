@@ -34,6 +34,8 @@ async function run() {
     const trainerApplicationCollection = client
       .db("syncFitDb")
       .collection("trainerApplications");
+    const forumCollection = client.db("syncFitDb").collection("forums");
+    const classCollection = client.db("syncFitDb").collection("classes");
 
     // jwt related apis
     //  creation of jwt token and sending as obj to frontend
@@ -65,6 +67,7 @@ async function run() {
     };
 
     // users related apis
+    // saving a user while log in/registration for first time
     app.post("/users", async (req, res) => {
       const user = req.body;
       const query = { email: user.email };
@@ -88,6 +91,10 @@ async function run() {
       const result = await subscriberCollection.insertOne(subscriber);
       res.send(result);
     });
+    app.get("/subscribers", async (req, res) => {
+      const result = await subscriberCollection.find().toArray();
+      res.send(result);
+    });
 
     // images api
     app.get("/images", async (req, res) => {
@@ -101,6 +108,7 @@ async function run() {
       res.send(result);
     });
 
+    // specific trainer details
     app.get("/trainer-details/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -108,9 +116,51 @@ async function run() {
       res.send(result);
     });
 
+    // trainer slot getting api
+    app.get("/get-timeslot/:day/:index", async (req, res) => {
+      const { day, index } = req.params;
+
+      try {
+        const trainer = await trainerCollection.findOne({});
+        const timeSlotOfDay = trainer.timeSlotOfDays[day];
+
+        if (!timeSlotOfDay || index >= timeSlotOfDay.length) {
+          return res.status(404).json({ message: "Time slot not found" });
+        }
+
+        const clickedSlot = timeSlotOfDay[index];
+        res.json(clickedSlot);
+      } catch (err) {
+        res.status(500).json({ message: err.message });
+      }
+    });
+
+    // trainer application from (become a trainer)
     app.post("/trainer-applications", async (req, res) => {
       const form = req.body;
       const result = await trainerApplicationCollection.insertOne(form);
+      res.send(result);
+    });
+
+    // community/forum api
+    app.get("/forums", async (req, res) => {
+      const result = await forumCollection.find().toArray();
+      res.send(result);
+    });
+    app.post("/forums", async (req, res) => {
+      const classes = req.body;
+      const result = await forumCollection.insertOne(classes);
+      res.send(result);
+    });
+
+    // Dashboard Trainer all apis
+    app.post("/classes", async (req, res) => {
+      const classes = req.body;
+      const result = await classCollection.insertOne(classes);
+      res.send(result);
+    });
+    app.get("/classes", async (req, res) => {
+      const result = await classCollection.find().toArray();
       res.send(result);
     });
 
