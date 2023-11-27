@@ -24,6 +24,10 @@ async function run() {
   try {
     await client.connect();
 
+    //
+    //
+    // db collection
+
     const userCollection = client.db("syncFitDb").collection("users");
     const reviewCollection = client.db("syncFitDb").collection("reviews");
     const subscriberCollection = client
@@ -36,6 +40,13 @@ async function run() {
       .collection("trainerApplications");
     const forumCollection = client.db("syncFitDb").collection("forums");
     const classCollection = client.db("syncFitDb").collection("classes");
+    const packageCollection = client.db("syncFitDb").collection("packages");
+    const trainerBookingCollection = client
+      .db("syncFitDb")
+      .collection("trainersSlotBooking");
+
+    //
+    //
 
     // jwt related apis
     //  creation of jwt token and sending as obj to frontend
@@ -65,6 +76,8 @@ async function run() {
         next();
       });
     };
+
+    //
 
     // users related apis
     // saving a user while log in/registration for first time
@@ -117,8 +130,8 @@ async function run() {
     });
 
     // trainer slot getting api
-    app.get("/get-timeslot/:day/:index", async (req, res) => {
-      const { day, index } = req.params;
+    app.get("/get-timeslot/:id/:day/:index", async (req, res) => {
+      const { id, day, index } = req.params;
 
       try {
         const trainer = await trainerCollection.findOne({});
@@ -133,6 +146,23 @@ async function run() {
       } catch (err) {
         res.status(500).json({ message: err.message });
       }
+    });
+
+    //
+    // trainer slot booking api
+    //
+
+    app.post("/trainer-bookings", async (req, res) => {
+      const bookedPackage = req.body;
+      const result = await trainerBookingCollection.insertOne(bookedPackage);
+      res.send(result);
+    });
+
+    //
+    // packages api
+    app.get("/packages", async (req, res) => {
+      const result = await packageCollection.find().toArray();
+      res.send(result);
     });
 
     // trainer application from (become a trainer)
@@ -153,7 +183,11 @@ async function run() {
       res.send(result);
     });
 
+    //
+    //
     // Dashboard Trainer all apis
+    //
+    // classes api
     app.post("/classes", async (req, res) => {
       const classes = req.body;
       const result = await classCollection.insertOne(classes);
