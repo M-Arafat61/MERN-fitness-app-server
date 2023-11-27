@@ -158,6 +158,14 @@ async function run() {
       res.send(result);
     });
 
+    app.get("/trainer-bookings/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { userEmail: email };
+      const result = await trainerBookingCollection.find(query).toArray();
+      // console.log(result);
+      res.send(result);
+    });
+
     //
     // packages api
     app.get("/packages", async (req, res) => {
