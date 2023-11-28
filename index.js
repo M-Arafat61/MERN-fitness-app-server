@@ -179,6 +179,48 @@ async function run() {
       const result = await trainerApplicationCollection.insertOne(form);
       res.send(result);
     });
+    app.get("/trainer-applications", async (req, res) => {
+      const result = await trainerApplicationCollection.find().toArray();
+      res.send(result);
+    });
+    app.patch(
+      "/trainer-applications/admin/:id",
+
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updatedDoc = {
+          $set: {
+            role: "trainer",
+            acceptanceDate: new Date(),
+          },
+        };
+        const result = await trainerApplicationCollection.updateOne(
+          filter,
+          updatedDoc,
+          options
+        );
+
+        if (result.modifiedCount > 0) {
+          const patchedDoc = await trainerApplicationCollection.findOne(filter);
+
+          await trainerCollection.insertOne(patchedDoc);
+
+          // Delete the patched document from trainerApplicationCollection
+          await trainerApplicationCollection.deleteOne(filter);
+
+          res.send({
+            success: true,
+            message: "Application moved to trainers collection.",
+          });
+        } else {
+          res
+            .status(404)
+            .send({ success: false, message: "Application not found." });
+        }
+      }
+    );
 
     // community/forum api
     app.get("/forums", async (req, res) => {
@@ -203,6 +245,12 @@ async function run() {
     });
     app.get("/classes", async (req, res) => {
       const result = await classCollection.find().toArray();
+      res.send(result);
+    });
+    app.get("/class-details/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await classCollection.findOne(query);
       res.send(result);
     });
 
