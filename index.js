@@ -4,6 +4,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const app = express();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const port = process.env.PORT || 5000;
 
 // middleware
@@ -44,6 +45,10 @@ async function run() {
     const trainerBookingCollection = client
       .db("syncFitDb")
       .collection("trainersSlotBooking");
+
+    const paymentCollection = client
+      .db("syncFitDb")
+      .collection("trainersPayment");
 
     //
     //
@@ -158,13 +163,68 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/trainer-bookings/:email", async (req, res) => {
+    // bookings of trainers slot
+    app.get("/trainer-bookings/trainer/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { trainerEmail: email };
+      const result = await trainerBookingCollection.find(query).toArray();
+      // console.log(result);
+      res.send(result);
+    });
+
+    // bookings of member
+    app.get("/all-bookings/member/:email", async (req, res) => {
       const email = req.params.email;
       const query = { userEmail: email };
       const result = await trainerBookingCollection.find(query).toArray();
       // console.log(result);
       res.send(result);
     });
+
+    //
+    //
+    //
+    //
+    //
+
+    // payment intent
+
+    app.post("/create-payment-intent", async (req, res) => {
+      const { salary } = req.body;
+      const amount = parseInt(salary * 100);
+      console.log(amount, "amount inside the intent stripe");
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    //
+    //
+    app.post("/trainers-payment", async (req, res) => {
+      try {
+        const payment = req.body;
+        await trainerCollection.updateOne(
+          { email: payment.email },
+          {
+            $set: { payment: "paid" },
+          }
+        );
+
+        const paymentResult = await paymentCollection.insertOne(payment);
+        console.log("payment info", payment);
+        res.status(200).json({ paymentResult });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    //
 
     //
     // packages api
@@ -179,10 +239,12 @@ async function run() {
       const result = await trainerApplicationCollection.insertOne(form);
       res.send(result);
     });
+
     app.get("/trainer-applications", async (req, res) => {
       const result = await trainerApplicationCollection.find().toArray();
       res.send(result);
     });
+
     app.patch(
       "/trainer-applications/admin/:id",
 
@@ -193,6 +255,8 @@ async function run() {
         const updatedDoc = {
           $set: {
             role: "trainer",
+            salary: 1200,
+            payment: "pending",
             acceptanceDate: new Date(),
           },
         };
@@ -207,12 +271,23 @@ async function run() {
 
           await trainerCollection.insertOne(patchedDoc);
 
-          // Delete the patched document from trainerApplicationCollection
           await trainerApplicationCollection.deleteOne(filter);
+
+          // changing role of user as trainer in userCollection
+          const userEmail = patchedDoc.email;
+          const userFilter = { email: userEmail };
+          const userUpdate = {
+            $set: {
+              role: "trainer",
+              acceptanceDate: new Date(),
+            },
+          };
+          await userCollection.updateOne(userFilter, userUpdate);
 
           res.send({
             success: true,
-            message: "Application moved to trainers collection.",
+            message:
+              "Application moved to trainers collection and role in user collection updated as trainer",
           });
         } else {
           res
