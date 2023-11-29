@@ -154,6 +154,39 @@ async function run() {
     });
 
     //
+    //
+    //
+    //
+    app.get("/subs-members", async (req, res) => {
+      try {
+        const distinctSubscriberEmails = await subscriberCollection
+          .aggregate([
+            { $group: { _id: null, distinctEmails: { $addToSet: "$email" } } },
+            { $project: { _id: 0, count: { $size: "$distinctEmails" } } },
+          ])
+          .toArray();
+
+        const distinctPaidMembersEmails = await trainerBookingCollection
+          .aggregate([
+            {
+              $group: {
+                _id: null,
+                distinctEmails: { $addToSet: "$userEmail" },
+              },
+            },
+            { $project: { _id: 0, count: { $size: "$distinctEmails" } } },
+          ])
+          .toArray();
+
+        const subscribers = distinctSubscriberEmails[0]?.count || 0;
+        const paidMembers = distinctPaidMembersEmails[0]?.count || 0;
+
+        res.json([{ subscribers, paidMembers }]);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     // trainer slot booking api
     //
 
@@ -163,7 +196,12 @@ async function run() {
       res.send(result);
     });
 
-    // bookings of trainers slot
+    app.get("/trainer-bookings", async (req, res) => {
+      const result = await trainerBookingCollection.find().toArray();
+      res.send(result);
+    });
+
+    // bookings of trainers slot also trainers member
     app.get("/trainer-bookings/trainer/:email", async (req, res) => {
       const email = req.params.email;
       const query = { trainerEmail: email };
@@ -182,7 +220,7 @@ async function run() {
     });
 
     //
-    //
+
     //
     //
     //
@@ -222,6 +260,11 @@ async function run() {
       } catch (error) {
         res.status(500).json({ error: error.message });
       }
+    });
+
+    app.get("/payments", async (req, res) => {
+      const result = await paymentCollection.find().toArray();
+      res.send(result);
     });
 
     //
@@ -310,7 +353,6 @@ async function run() {
 
     //
     //
-    // Dashboard Trainer all apis
     //
     // classes api
     app.post("/classes", async (req, res) => {
