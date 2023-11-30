@@ -26,7 +26,6 @@ async function run() {
     await client.connect();
 
     //
-    //
     // db collection
 
     const userCollection = client.db("syncFitDb").collection("users");
@@ -83,6 +82,60 @@ async function run() {
     };
 
     //
+    //
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+    const verifyTrainerOrAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isTrainerOrAdmin = user?.role === "trainer" || "admin";
+      if (!isTrainerOrAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
+    //
+    // get admin
+    app.get("/users/admin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      let admin = false;
+      if (user) {
+        admin = user?.role === "admin";
+        res.send({ admin });
+      }
+    });
+    // get trainer
+    app.get("/users/trainer/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      let trainer = false;
+      if (user) {
+        trainer = user?.role === "trainer";
+        res.send({ trainer });
+      }
+    });
 
     // users related apis
     // saving a user while log in/registration for first time
@@ -109,7 +162,7 @@ async function run() {
       const result = await subscriberCollection.insertOne(subscriber);
       res.send(result);
     });
-    app.get("/subscribers", async (req, res) => {
+    app.get("/subscribers", verifyToken, verifyAdmin, async (req, res) => {
       const result = await subscriberCollection.find().toArray();
       res.send(result);
     });
@@ -157,7 +210,7 @@ async function run() {
     //
     //
     //
-    app.get("/subs-members", async (req, res) => {
+    app.get("/subs-members", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const distinctSubscriberEmails = await subscriberCollection
           .aggregate([
@@ -190,34 +243,54 @@ async function run() {
     // trainer slot booking api
     //
 
-    app.post("/trainer-bookings", async (req, res) => {
-      const bookedPackage = req.body;
-      const result = await trainerBookingCollection.insertOne(bookedPackage);
-      res.send(result);
-    });
+    app.post(
+      "/trainer-bookings",
+      verifyToken,
+      verifyTrainerOrAdmin,
+      async (req, res) => {
+        const bookedPackage = req.body;
+        const result = await trainerBookingCollection.insertOne(bookedPackage);
+        res.send(result);
+      }
+    );
 
-    app.get("/trainer-bookings", async (req, res) => {
-      const result = await trainerBookingCollection.find().toArray();
-      res.send(result);
-    });
+    app.get(
+      "/trainer-bookings",
+      verifyToken,
+      verifyTrainerOrAdmin,
+      async (req, res) => {
+        const result = await trainerBookingCollection.find().toArray();
+        res.send(result);
+      }
+    );
 
     // bookings of trainers slot also trainers member
-    app.get("/trainer-bookings/trainer/:email", async (req, res) => {
-      const email = req.params.email;
-      const query = { trainerEmail: email };
-      const result = await trainerBookingCollection.find(query).toArray();
-      // console.log(result);
-      res.send(result);
-    });
+    app.get(
+      "/trainer-bookings/trainer/:email",
+      verifyToken,
+      verifyTrainerOrAdmin,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = { trainerEmail: email };
+        const result = await trainerBookingCollection.find(query).toArray();
+        // console.log(result);
+        res.send(result);
+      }
+    );
 
     // bookings of member
-    app.get("/all-bookings/member/:email", async (req, res) => {
-      const email = req.params.email;
-      const query = { userEmail: email };
-      const result = await trainerBookingCollection.find(query).toArray();
-      // console.log(result);
-      res.send(result);
-    });
+    app.get(
+      "/all-bookings/member/:email",
+      verifyToken,
+      verifyTrainerOrAdmin,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = { userEmail: email };
+        const result = await trainerBookingCollection.find(query).toArray();
+        // console.log(result);
+        res.send(result);
+      }
+    );
 
     //
 
@@ -227,42 +300,52 @@ async function run() {
 
     // payment intent
 
-    app.post("/create-payment-intent", async (req, res) => {
-      const { salary } = req.body;
-      const amount = parseInt(salary * 100);
-      console.log(amount, "amount inside the intent stripe");
+    app.post(
+      "/create-payment-intent",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { salary } = req.body;
+        const amount = parseInt(salary * 100);
+        console.log(amount, "amount inside the intent stripe");
 
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amount,
-        currency: "usd",
-        payment_method_types: ["card"],
-      });
-      res.send({
-        clientSecret: paymentIntent.client_secret,
-      });
-    });
-
-    //
-    //
-    app.post("/trainers-payment", async (req, res) => {
-      try {
-        const payment = req.body;
-        await trainerCollection.updateOne(
-          { email: payment.email },
-          {
-            $set: { payment: "paid" },
-          }
-        );
-
-        const paymentResult = await paymentCollection.insertOne(payment);
-        console.log("payment info", payment);
-        res.status(200).json({ paymentResult });
-      } catch (error) {
-        res.status(500).json({ error: error.message });
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: "usd",
+          payment_method_types: ["card"],
+        });
+        res.send({
+          clientSecret: paymentIntent.client_secret,
+        });
       }
-    });
+    );
 
-    app.get("/payments", async (req, res) => {
+    //
+    //
+    app.post(
+      "/trainers-payment",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const payment = req.body;
+          await trainerCollection.updateOne(
+            { email: payment.email },
+            {
+              $set: { payment: "paid" },
+            }
+          );
+
+          const paymentResult = await paymentCollection.insertOne(payment);
+          console.log("payment info", payment);
+          res.status(200).json({ paymentResult });
+        } catch (error) {
+          res.status(500).json({ error: error.message });
+        }
+      }
+    );
+
+    app.get("/payments", verifyToken, verifyAdmin, async (req, res) => {
       const result = await paymentCollection.find().toArray();
       res.send(result);
     });
@@ -271,25 +354,32 @@ async function run() {
 
     //
     // packages api
-    app.get("/packages", async (req, res) => {
+    app.get("/packages", verifyToken, async (req, res) => {
       const result = await packageCollection.find().toArray();
       res.send(result);
     });
 
     // trainer application from (become a trainer)
-    app.post("/trainer-applications", async (req, res) => {
+    app.post("/trainer-applications", verifyToken, async (req, res) => {
       const form = req.body;
       const result = await trainerApplicationCollection.insertOne(form);
       res.send(result);
     });
 
-    app.get("/trainer-applications", async (req, res) => {
-      const result = await trainerApplicationCollection.find().toArray();
-      res.send(result);
-    });
+    app.get(
+      "/trainer-applications",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const result = await trainerApplicationCollection.find().toArray();
+        res.send(result);
+      }
+    );
 
     app.patch(
       "/trainer-applications/admin/:id",
+      verifyToken,
+      verifyAdmin,
 
       async (req, res) => {
         const id = req.params.id;
@@ -345,7 +435,7 @@ async function run() {
       const result = await forumCollection.find().toArray();
       res.send(result);
     });
-    app.post("/forums", async (req, res) => {
+    app.post("/forums", verifyToken, async (req, res) => {
       const classes = req.body;
       const result = await forumCollection.insertOne(classes);
       res.send(result);
